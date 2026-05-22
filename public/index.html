@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistem Clicker</title>
+    <style>
+        body { font-family: monospace; text-align: center; background: #0f0f0f; color: #fff; margin-top: 50px; }
+        input, button { padding: 10px; margin: 5px; font-family: monospace; }
+        button { background: #333; border: 1px solid #555; cursor: pointer; color: white; }
+        button:hover { background: #555; }
+        #gameArea, #leaderboardArea { display: none; margin-top: 20px; }
+        .click-btn { font-size: 24px; padding: 20px 40px; border-radius: 5px; background: #c0392b; border: none; font-weight: bold; }
+        table { margin: 0 auto; border-collapse: collapse; width: 350px; }
+        th, td { border: 1px solid #444; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div id="authArea">
+        <h2>Otorisasi Akses</h2>
+        <input type="text" id="username" placeholder="Username"><br>
+        <input type="password" id="password" placeholder="Password"><br>
+        <button onclick="auth('login')">Masuk</button>
+        <button onclick="auth('register')">Daftar</button>
+        <p id="msg"></p>
+    </div>
+
+    <div id="gameArea">
+        <h2>Identitas: <span id="userDisplay"></span></h2>
+        <h1 id="scoreDisplay">0</h1>
+        <button class="click-btn" onclick="addClick()">EKSEKUSI KLIK</button>
+        <br><br>
+        <button onclick="loadLeaderboard()">Tarik Papan Peringkat</button>
+    </div>
+
+    <div id="leaderboardArea">
+        <h3>Top 10 Responden</h3>
+        <table>
+            <thead><tr><th>Entitas</th><th>Total Eksekusi</th></tr></thead>
+            <tbody id="lbBody"></tbody>
+        </table>
+        <br>
+        <button onclick="document.getElementById('leaderboardArea').style.display='none'">Tutup Visualisasi</button>
+    </div>
+
+    <script>
+        let token = '';
+        async function auth(action) {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const res = await fetch(`/${action}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                if (action === 'login') {
+                    token = data.token;
+                    document.getElementById('authArea').style.display = 'none';
+                    document.getElementById('gameArea').style.display = 'block';
+                    document.getElementById('userDisplay').innerText = username;
+                    document.getElementById('scoreDisplay').innerText = data.clicks;
+                } else {
+                    document.getElementById('msg').innerText = "Identitas direkam. Lakukan login.";
+                }
+            } else {
+                document.getElementById('msg').innerText = data.error;
+            }
+        }
+
+        async function addClick() {
+            const res = await fetch('/click', {
+                method: 'POST',
+                headers: { 'Authorization': token }
+            });
+            const data = await res.json();
+            if (res.ok) document.getElementById('scoreDisplay').innerText = data.clicks;
+        }
+
+        async function loadLeaderboard() {
+            const res = await fetch('/leaderboard');
+            const data = await res.json();
+            const tbody = document.getElementById('lbBody');
+            tbody.innerHTML = '';
+            data.forEach(user => {
+                tbody.innerHTML += `<tr><td>${user.username}</td><td>${user.clicks}</td></tr>`;
+            });
+            document.getElementById('leaderboardArea').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
