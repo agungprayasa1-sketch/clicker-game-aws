@@ -10,9 +10,13 @@ app.use(express.static('public'));
 
 const SECRET_KEY = 'rahasia_sistem_advisor'; 
 const db = new sqlite3.Database('./game.db');
+
+// Modifikasi 1: Ekspansi Skema Basis Data
 db.serialize(() => {
     db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, clicks INTEGER DEFAULT 0)");
+    db.run("CREATE TABLE IF NOT EXISTS chat (id INTEGER PRIMARY KEY, username TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
 });
+
 const authenticate = (req, res, next) => {
     const token = req.headers.authorization;
     if (!token) return res.status(401).json({ error: "Akses ditolak" });
@@ -33,6 +37,7 @@ app.post('/register', (req, res) => {
         res.json({ message: "Registrasi berhasil" });
     });
 });
+
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
     db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
@@ -51,9 +56,27 @@ app.post('/click', authenticate, (req, res) => {
         });
     });
 });
+
 app.get('/leaderboard', (req, res) => {
     db.all("SELECT username, clicks FROM users ORDER BY clicks DESC LIMIT 10", [], (err, rows) => {
         res.json(rows);
     });
 });
+
+// Modifikasi 2: Rute Penerimaan dan Penarikan Obrolan
+app.post('/chat', authenticate, (req, res) => {
+    const { message } = req.body;
+    db.run("INSERT INTO chat (username, message) VALUES (?, ?)", [req.user.username, message], (err) => {
+        if (err) return res.status(500).json({ error: "Gagal menyimpan pesan" });
+        res.json({ success: true });
+    });
+});
+
+app.get('/chat', (req, res) => {
+    db.all("SELECT username, message FROM chat ORDER BY id ASC LIMIT 50", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: "Gagal menarik pesan" });
+        res.json(rows);
+    });
+});
+
 app.listen(3000, () => console.log('Server beroperasi di Port 3000'));

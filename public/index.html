@@ -4,14 +4,21 @@
     <meta charset="UTF-8">
     <title>Sistem Clicker</title>
     <style>
-        body { font-family: monospace; text-align: center; background: #0f0f0f; color: #fff; margin-top: 50px; }
+        body { font-family: monospace; background: #0f0f0f; color: #fff; margin: 0; display: flex; height: 100vh; }
+        #panel-chat { width: 30%; border-right: 1px solid #444; padding: 20px; display: none; flex-direction: column; background: #1a1a1a; }
+        #ruang-obrolan { flex-grow: 1; overflow-y: auto; text-align: left; border: 1px solid #333; padding: 10px; margin-bottom: 10px; background: #000; }
+        #panel-game { width: 70%; padding: 20px; text-align: center; overflow-y: auto; display: flex; flex-direction: column; align-items: center;}
         input, button { padding: 10px; margin: 5px; font-family: monospace; }
-        button { background: #333; border: 1px solid #555; cursor: pointer; color: white; }
+        button { background: #333; border: 1px solid #555; cursor: pointer; color: white; transition: 0.2s; }
         button:hover { background: #555; }
-        #gameArea, #leaderboardArea { display: none; margin-top: 20px; }
-        .click-btn { font-size: 24px; padding: 20px 40px; border-radius: 5px; background: #c0392b; border: none; font-weight: bold; }
-        table { margin: 0 auto; border-collapse: collapse; width: 350px; }
-        th, td { border: 1px solid #444; padding: 10px; }
+        #authArea { text-align: center; margin-top: 10vh; width: 100%; position: absolute; z-index: 10; background: #0f0f0f; height: 100vh;}
+        #gameArea, #leaderboardArea { display: none; margin-top: 20px; width: 100%; }
+        .click-btn { font-size: 24px; padding: 20px 40px; border-radius: 5px; background: #c0392b; border: none; font-weight: bold; width: 350px; }
+        .click-btn:hover { background: #e74c3c; }
+        table { margin: 0 auto; border-collapse: collapse; width: 350px; background: #111; }
+        th, td { border: 1px solid #444; padding: 10px; text-align: center; }
+        .chat-msg { margin-bottom: 8px; border-bottom: 1px solid #222; padding-bottom: 4px; }
+        .chat-name { color: #c0392b; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -24,26 +31,33 @@
         <p id="msg"></p>
     </div>
 
-    <div id="gameArea">
-        <h2>Identitas: <span id="userDisplay"></span></h2>
-        <h1 id="scoreDisplay">0</h1>
-        <button class="click-btn" onclick="addClick()">EKSEKUSI KLIK</button>
-        <br><br>
-        <button onclick="loadLeaderboard()">Tarik Papan Peringkat</button>
+    <div id="panel-chat">
+        <h3>Saluran Komunikasi</h3>
+        <div id="ruang-obrolan"></div>
+        <input type="text" id="inputChat" placeholder="Ketik pesan..." onkeypress="if(event.key === 'Enter') kirimChat()">
+        <button onclick="kirimChat()">Kirim Transmisi</button>
     </div>
 
-    <div id="leaderboardArea">
-        <h3>Top 10 Responden</h3>
-        <table>
-            <thead><tr><th>Entitas</th><th>Total Eksekusi</th></tr></thead>
-            <tbody id="lbBody"></tbody>
-        </table>
-        <br>
-        <button onclick="document.getElementById('leaderboardArea').style.display='none'">Tutup Visualisasi</button>
+    <div id="panel-game">
+        <div id="gameArea">
+            <h2>Identitas Aktif: <span id="userDisplay" style="color: #c0392b;"></span></h2>
+            <h1 id="scoreDisplay" style="font-size: 48px;">0</h1>
+            <button class="click-btn" onclick="addClick()">EKSEKUSI KLIK</button>
+        </div>
+
+        <div id="leaderboardArea">
+            <h3>Top 10 Responden (Sinkronisasi Otonom)</h3>
+            <table>
+                <thead><tr><th>Entitas</th><th>Total Eksekusi</th></tr></thead>
+                <tbody id="lbBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
         let token = '';
+        let pollingIntervals = [];
+
         async function auth(action) {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -58,9 +72,20 @@
                 if (action === 'login') {
                     token = data.token;
                     document.getElementById('authArea').style.display = 'none';
+                    document.getElementById('panel-chat').style.display = 'flex';
                     document.getElementById('gameArea').style.display = 'block';
+                    document.getElementById('leaderboardArea').style.display = 'block';
                     document.getElementById('userDisplay').innerText = username;
                     document.getElementById('scoreDisplay').innerText = data.clicks;
+                    
+                    // Picu Sinkronisasi Awal
+                    loadLeaderboard();
+                    loadChat();
+                    
+                    // Injeksi Interval Sinkronisasi Otonom (Polling)
+                    // Menarik data setiap 2000 milidetik (2 detik)
+                    pollingIntervals.push(setInterval(loadLeaderboard, 2000));
+                    pollingIntervals.push(setInterval(loadChat, 2000));
                 } else {
                     document.getElementById('msg').innerText = "Identitas direkam. Lakukan login.";
                 }
@@ -70,12 +95,12 @@
         }
 
         async function addClick() {
-            const res = await fetch('/click', {
-                method: 'POST',
-                headers: { 'Authorization': token }
-            });
+            const res = await fetch('/click', { method: 'POST', headers: { 'Authorization': token } });
             const data = await res.json();
-            if (res.ok) document.getElementById('scoreDisplay').innerText = data.clicks;
+            if (res.ok) {
+                document.getElementById('scoreDisplay').innerText = data.clicks;
+                loadLeaderboard(); // Segarkan instan
+            }
         }
 
         async function loadLeaderboard() {
@@ -86,7 +111,39 @@
             data.forEach(user => {
                 tbody.innerHTML += `<tr><td>${user.username}</td><td>${user.clicks}</td></tr>`;
             });
-            document.getElementById('leaderboardArea').style.display = 'block';
+        }
+
+        async function kirimChat() {
+            const input = document.getElementById('inputChat');
+            const message = input.value;
+            if (!message.trim()) return;
+            
+            await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                body: JSON.stringify({ message })
+            });
+            input.value = '';
+            loadChat(); // Segarkan instan
+        }
+
+        async function loadChat() {
+            const res = await fetch('/chat');
+            const data = await res.json();
+            const ruang = document.getElementById('ruang-obrolan');
+            
+            // Kalkulasi posisi gulir (scroll)
+            const isScrolledToBottom = ruang.scrollHeight - ruang.clientHeight <= ruang.scrollTop + 50;
+            
+            ruang.innerHTML = '';
+            data.forEach(chat => {
+                ruang.innerHTML += `<div class="chat-msg"><span class="chat-name">${chat.username}:</span> ${chat.message}</div>`;
+            });
+            
+            // Tahan posisi gulir di bawah jika sebelumnya di bawah
+            if (isScrolledToBottom) {
+                ruang.scrollTop = ruang.scrollHeight;
+            }
         }
     </script>
 </body>
